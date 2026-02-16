@@ -1,9 +1,30 @@
 import ipaddress
+import logging
 from typing import Any
 
 import requests
 
 from config import Settings
+
+logger = logging.getLogger("grafana_hook")
+
+
+def _normalize_ip_label_value(raw_value: str) -> str:
+    candidate = raw_value.strip()
+    if len(candidate) >= 2 and candidate[0] == candidate[-1] and candidate[0] in ("'", '"'):
+        candidate = candidate[1:-1].strip()
+
+    try:
+        return str(ipaddress.ip_address(candidate))
+    except ValueError:
+        pass
+
+    try:
+        network = ipaddress.ip_network(candidate, strict=False)
+    except ValueError as exc:
+        raise ValueError("invalid IP address") from exc
+
+    return str(network.network_address)
 
 
 def _extract_alert_ips(payload: dict[str, Any]) -> tuple[dict[str, str], list[dict[str, Any]]]:
@@ -46,20 +67,21 @@ def _extract_alert_ips(payload: dict[str, Any]) -> tuple[dict[str, str], list[di
                 }
             )
             continue
-
-        ip_candidate = ip_value.strip()
         try:
-            ipaddress.ip_address(ip_candidate)
+            ip_candidate = _normalize_ip_label_value(ip_value)
         except ValueError:
             rejected.append(
                 {
                     "index": idx,
-                    "ip": ip_candidate,
+                    "ip": ip_value.strip(),
                     "status": "rejected",
                     "error": "invalid IP address",
                 }
             )
             continue
+        if ip_candidate != ip_value.strip():
+            logger.debug("Normalized labels.ip value from %r to %s", ip_value, ip_candidate)
+
 
         if ip_candidate in deduped:
             continue
@@ -114,6 +136,12 @@ def process_ip_blacklist_webhook(payload: dict[str, Any], settings: Settings) ->
                 headers=headers,
                 json=request_body,
                 timeout=settings.request_timeout_seconds,
+            )
+            logger.debug(
+                "iplistd response: ip=%s status_code=%s body=%s",
+                ip_value,
+                response.status_code,
+                response.text[:1000],
             )
             if 200 <= response.status_code < 300:
                 succeeded += 1

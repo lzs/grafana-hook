@@ -35,6 +35,7 @@ Copy `.env.example` to `.env` and set values:
 - `IPLIST_TIMEOUT_SECONDS` (default `86400`)
 - `IPLIST_REASON_PREFIX` (default `grafana`)
 - `REQUEST_TIMEOUT_SECONDS` (default `5`)
+- `DEBUG` (default `false`; set `true` to enable debug logs)
 
 ## Run
 

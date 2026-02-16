@@ -1,5 +1,6 @@
 from typing import Any
 import hmac
+import json
 import logging
 
 from fastapi import FastAPI, HTTPException, Request
@@ -8,10 +9,12 @@ from fastapi.responses import JSONResponse
 from config import Settings, load_settings
 from handlers.ip_blacklist import process_ip_blacklist_webhook
 
-logger = logging.getLogger("grafana_hook")
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-
 settings: Settings = load_settings()
+logger = logging.getLogger("grafana_hook")
+logging.basicConfig(
+    level=logging.DEBUG if settings.debug else logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+)
 
 app = FastAPI(
     title="Grafana Hook Middleware",
@@ -49,6 +52,8 @@ async def grafana_ip_blacklist(request: Request) -> JSONResponse:
         raise HTTPException(status_code=400, detail="Payload missing 'status'")
     if "alerts" not in payload:
         raise HTTPException(status_code=400, detail="Payload missing 'alerts'")
+
+    logger.debug("Received webhook payload JSON: %s", json.dumps(payload, sort_keys=True))
 
     try:
         summary = process_ip_blacklist_webhook(payload, settings)
